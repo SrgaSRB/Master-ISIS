@@ -7,44 +7,43 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 
-
-def rmse(actual, predictions):
-    actual = np.asarray(actual).ravel()
-    predictions = np.asarray(predictions).ravel()
-    return np.sqrt(np.mean((actual - predictions) ** 2))
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
-def plot_predictions(actual, predictions):
-    plt.figure(figsize=(10, 5))
-    plt.plot(np.asarray(actual).ravel(), label="Stvarna potrošnja")
-    plt.plot(np.asarray(predictions).ravel(), color="red", alpha=0.8, label="Predviđena potrošnja")
-    plt.xlabel("Merenje u test skupu")
-    plt.ylabel("Zone 1 Power Consumption")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+def mae(targets, predictions):
+    return np.mean(np.abs(targets - predictions))
+
+def mse(targets, predictions):
+    return np.mean(np.square(targets - predictions))
+
+def rmse(targets, predictions):
+    return np.sqrt(mse(targets, predictions))
+
+def r2(targets, predictions):
+    ss_res = np.sum(np.square(targets - predictions))
+    ss_tot = np.sum(np.square(targets - np.mean(targets)))
+    return 1 - (ss_res / ss_tot)
 
 
 df = pd.read_csv("data.csv")
 df.columns = df.columns.str.strip()
 
-inputs = ["Temperature", "Humidity", "Wind Speed", "general diffuse flows", "diffuse flows"]
+df.info()
+df.describe()
+
 target = "Zone 1 Power Consumption"
 
-df[inputs + [target]] = df[inputs + [target]].apply(pd.to_numeric, errors="coerce")
-df = df.dropna(subset=inputs + [target])
+sns.heatmap(df.corr(numeric_only=True), annot=True)
+plt.show()
 
-X = df[inputs]
-y = df[target]
+df.corr(numeric_only=True)[target].sort_values(ascending=False)
 
-X_dev, X_test, y_dev, y_test = train_test_split(
-    X, y, test_size=0.2, shuffle=False
+inputs = ["Temperature", "Humidity", "Wind Speed", "general diffuse flows", "diffuse flows"]
+
+X_train, X_test, y_train, y_test = train_test_split(
+    df[inputs], df[target], test_size=0.2, random_state=42
 )
-
-X_train, X_val, y_train, y_val = train_test_split(
-    X_dev, y_dev, test_size=0.25, shuffle=False
-)
-
 
 def fitness_func(ga_instance, solution, solution_idx):
     selected_columns = [column for column, gene in zip(inputs, solution) if gene == 1]
@@ -54,10 +53,9 @@ def fitness_func(ga_instance, solution, solution_idx):
 
     candidate_model = LinearRegression()
     candidate_model.fit(X_train[selected_columns], y_train)
-    predictions = candidate_model.predict(X_val[selected_columns])
-    mae = mean_absolute_error(y_val, predictions)
+    predictions = candidate_model.predict(X_test[selected_columns])
 
-    return 1.0 / (1.0 + rmse(y_val, predictions))
+    return 1.0 / (1.0 + rmse(y_test, predictions))
 
 
 ga = pygad.GA(
@@ -65,7 +63,7 @@ ga = pygad.GA(
     sol_per_pop=20,                     # Broj kombinacija kolona u svakoj generaciji
     num_parents_mating=4,               # Broj roditelja koji stvaraju potomke
     num_genes=len(inputs),              # Jedan gen za svaku ulaznu kolonu
-    gene_type=int,                     # Celobrojni geni
+    gene_type=int,                      # Celobrojni geni
     gene_space=[0, 1],                  # 0 = preskoči kolonu, 1 = koristi kolonu
     fitness_func=fitness_func,          # Funkcija koja ocenjuje kombinaciju kolona
     parent_selection_type="tournament", # Izbor roditelja takmičenjem nasumično izabranih kandidata
@@ -73,7 +71,7 @@ ga = pygad.GA(
     crossover_type="single_point",      # Spajanje delova dva roditelja na jednoj tački preseka
     mutation_type="random",             # Nasumičan izbor dozvoljene vrednosti pri mutaciji
     mutation_num_genes=1,               # Jedan gen se bira za mutaciju kod svakog potomka
-    random_seed=42                     # Ponovljivi rezultati pri istim podacima i podešavanjima
+    random_seed=42                      # Ponovljivi rezultati pri istim podacima i podešavanjima
 )
 
 ga.run()
@@ -86,7 +84,7 @@ print("Izabrane kolone:", best_inputs)
 print("Validacioni MAE:", 1.0 / fitness - 1.0)
 
 model = LinearRegression()
-model.fit(X_dev[best_inputs], y_dev)
+model.fit(X_train[best_inputs], y_train)
 
 y_pred = model.predict(X_test[best_inputs])
 
@@ -94,5 +92,3 @@ print("\nRezultati na test skupu:")
 print("MAE:", mean_absolute_error(y_test, y_pred))
 print("RMSE:", rmse(y_test, y_pred))
 print("R²:", r2_score(y_test, y_pred))
-
-plot_predictions(y_test, y_pred)
