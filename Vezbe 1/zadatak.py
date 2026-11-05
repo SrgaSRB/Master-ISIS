@@ -41,8 +41,14 @@ df.corr(numeric_only=True)[target].sort_values(ascending=False)
 
 inputs = ["Temperature", "Humidity", "Wind Speed", "general diffuse flows", "diffuse flows"]
 
-X_train, X_test, y_train, y_test = train_test_split(
+# 80% podataka za razvoj modela, 20% za konačno testiranje
+X_dev, X_test, y_dev, y_test = train_test_split(
     df[inputs], df[target], test_size=0.2, random_state=42
+)
+
+# Od preostalih 80% izdvajamo 25% za validaciju
+X_train, X_val, y_train, y_val = train_test_split(
+    X_dev, y_dev, test_size=0.25, random_state=42
 )
 
 def fitness_func(ga_instance, solution, solution_idx):
@@ -53,9 +59,9 @@ def fitness_func(ga_instance, solution, solution_idx):
 
     candidate_model = LinearRegression()
     candidate_model.fit(X_train[selected_columns], y_train)
-    predictions = candidate_model.predict(X_test[selected_columns])
+    predictions = candidate_model.predict(X_val[selected_columns])
 
-    return 1.0 / (1.0 + rmse(y_test, predictions))
+    return 1.0 / (1.0 + rmse(y_val, predictions))
 
 
 ga = pygad.GA(
@@ -81,14 +87,15 @@ best_inputs = [column for column, gene in zip(inputs, solution) if gene == 1]
 
 print("Najbolja pronađena kombinacija gena:", solution)
 print("Izabrane kolone:", best_inputs)
-print("Validacioni MAE:", 1.0 / fitness - 1.0)
+print("Validacioni RMSE:", 1.0 / fitness - 1.0)
 
+# Završno treniranje na 80% podataka
 model = LinearRegression()
-model.fit(X_train[best_inputs], y_train)
+model.fit(X_dev[best_inputs], y_dev)
 
+# Konačno testiranje na preostalih 20%
 y_pred = model.predict(X_test[best_inputs])
 
-print("\nRezultati na test skupu:")
 print("MAE:", mean_absolute_error(y_test, y_pred))
 print("RMSE:", rmse(y_test, y_pred))
 print("R²:", r2_score(y_test, y_pred))
