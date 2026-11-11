@@ -1,0 +1,11 @@
+{
+  "hidden_layers": [
+    128,
+    64
+  ],
+  "activation_function": "relu",
+  "kernel_initializer": "he_normal",
+  "cost_function": "mean_squared_error",
+  "batch_size_number": 32,
+  "test_rmse": 2.7583871734374026
+}
